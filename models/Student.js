@@ -48,11 +48,13 @@ const StudentSchema = new mongoose.Schema({
     enum: ['Male', 'Female', 'Other']
   },
   dob: Date,
+  enrollment_date: Date,
   department_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department'
   },
   address: { type: String, trim: true },
+  emergency_contact: { type: String, trim: true },
   enrollment_status: {
     type: String,
     enum: ['Active', 'Inactive', 'Graduated', 'Suspended'],
