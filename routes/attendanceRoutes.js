@@ -10,6 +10,9 @@ const attendanceController = require("../controllers/attendanceController");
 // PROFESSOR MARK ATTENDANCE
 // ----------------------
 router.post("/mark", professorAuth, attendanceController.markAttendance);
+router.post("/lecture-session/generate", professorAuth, attendanceController.generateLectureQr);
+router.post("/lecture-session/close", professorAuth, attendanceController.closeLectureSession);
+router.post("/lecture-session/report", professorAuth, attendanceController.getLectureSessionReport);
 
 // ----------------------
 // VIEW ATTENDANCE BY COURSE (Professor/Admin)
@@ -21,6 +24,7 @@ router.get("/course/admin", adminAuth, attendanceController.getAttendanceByCours
 // STUDENT VIEW THEIR OWN ATTENDANCE
 // ----------------------
 router.get("/me", studentAuth, attendanceController.getStudentAttendance);
+router.post("/lecture-session/scan", studentAuth, attendanceController.scanLectureQr);
 
 
 // ================================

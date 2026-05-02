@@ -1,22 +1,56 @@
 const express = require("express");
 const router = express.Router();
 const Notification = require("../models/Notification");
-
-const studentAuth = require("../middlewares/studentAuth");
-const professorAuth = require("../middlewares/professorAuth");
+const Student = require("../models/Student");
+const Professor = require("../models/Professor");
+const { verifyAccessToken } = require("../utils/token");
 
 // Unified auth: allow student OR professor
 const userAuth = async (req, res, next) => {
     try {
-        await professorAuth(req, res, async () => {
-            req.userRole = "Professor";
-            next();
-        });
-    } catch {
-        await studentAuth(req, res, async () => {
+        const header = req.headers.authorization;
+        if (!header || !header.startsWith("Bearer ")) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        const token = header.split(" ")[1];
+        let payload;
+
+        try {
+            payload = verifyAccessToken(token);
+        } catch (err) {
+            console.error("Notification auth token error:", err.message);
+            return res.status(401).json({ success: false, message: "Invalid or expired token" });
+        }
+
+        const role = (payload.role || "").toString().toLowerCase();
+
+        if (role === "student") {
+            const student = await Student.findById(payload.id);
+            if (!student || student.isDeleted) {
+                return res.status(401).json({ success: false, message: "Unauthorized" });
+            }
+
+            req.user = { id: student._id.toString(), email: student.email, role: "student" };
             req.userRole = "Student";
-            next();
-        });
+            return next();
+        }
+
+        if (role === "professor") {
+            const professor = await Professor.findById(payload.id);
+            if (!professor || professor.isDeleted) {
+                return res.status(401).json({ success: false, message: "Unauthorized" });
+            }
+
+            req.user = { id: professor._id.toString(), email: professor.email, role: "professor" };
+            req.userRole = "Professor";
+            return next();
+        }
+
+        return res.status(403).json({ success: false, message: "Forbidden" });
+    } catch (err) {
+        console.error("Notification auth error:", err);
+        return res.status(500).json({ success: false, message: "Server error" });
     }
 };
 
