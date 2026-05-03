@@ -23,6 +23,12 @@ const LectureSlidesSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
+    
+    type: {
+        type: String,
+        enum: ["lecture", "sheet", "recording", "book"],
+        default: "lecture",
+    },
 });
 
 const LectureSlides = mongoose.model('LectureSlides', LectureSlidesSchema);

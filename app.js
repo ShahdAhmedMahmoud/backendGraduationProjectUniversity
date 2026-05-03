@@ -21,6 +21,7 @@ const slidesRoutes = require('./routes/slidesRoutes');
 const notificationsRoutes = require('./routes/notificationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const studentAttendanceRoutes = require('./routes/studentAttendanceRoutes');
+const gradeRoutes = require('./routes/gradeRoutes');
 
 
 const app = express();
@@ -49,7 +50,22 @@ app.use(cors({
 // app.use('/uploads', express.static(path.join(__dirname, '..', process.env.UPLOAD_DIR || 'uploads')));
 // app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Static uploads - with correct MIME types for video files
+app.use('/uploads', (req, res, next) => {
+  const ext = path.extname(req.path).toLowerCase();
+  const videoMimes = {
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+  };
+  if (videoMimes[ext]) {
+    res.setHeader("Content-Type", videoMimes[ext]);
+    res.setHeader("Content-Disposition", "inline");
+  }
+  next();
+}, express.static(path.join(process.cwd(), 'uploads')));
 
 
 
@@ -64,6 +80,7 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/records', academicRecordRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use("/api/attendance", studentAttendanceRoutes);
+app.use('/api/grades', gradeRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/slides', slidesRoutes);
 app.use("/api/notifications", notificationsRoutes);
