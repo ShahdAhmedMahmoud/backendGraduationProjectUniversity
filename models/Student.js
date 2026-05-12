@@ -100,6 +100,10 @@ const StudentSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  onboardingPassword: {
+    type: String,
+    default: null
+  },
 
   // optional analytics
   gpa: { type: Number, default: null },

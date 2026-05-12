@@ -167,6 +167,7 @@ router.post("/reset-password", studentController.resetPassword);
 
 // Protected Student routes
 router.post("/courses", studentAuth, studentController.myCourses);
+router.get("/available-courses", studentAuth, studentController.getAvailableCourses);
 router.get("/me", studentAuth, studentController.me);
 router.put(
   "/me",

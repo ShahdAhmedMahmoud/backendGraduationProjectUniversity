@@ -22,6 +22,7 @@ const notificationsRoutes = require('./routes/notificationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const studentAttendanceRoutes = require('./routes/studentAttendanceRoutes');
 const gradeRoutes = require('./routes/gradeRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 
 const app = express();
@@ -84,6 +85,7 @@ app.use('/api/grades', gradeRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/slides', slidesRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/payments", paymentRoutes);
 
 
 // Health check

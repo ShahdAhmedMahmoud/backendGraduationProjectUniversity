@@ -31,7 +31,14 @@ const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedExtensions = [
+    const requestedType = (req.query.type || "lecture").toString().toLowerCase();
+    const allowedByType = {
+      lecture: [".pdf", ".ppt", ".pptx", ".doc", ".docx"],
+      sheet: [".pdf", ".ppt", ".pptx", ".doc", ".docx"],
+      recording: [".mp4", ".mov", ".avi", ".mkv", ".webm"],
+      book: [".pdf", ".epub", ".mobi"],
+    };
+    const fallbackAllowed = [
       ".pdf",
       ".ppt",
       ".pptx",
@@ -42,26 +49,14 @@ const upload = multer({
       ".avi",
       ".mkv",
       ".webm",
-      ".epub", ".mobi"
+      ".epub",
+      ".mobi",
     ];
-    const allowedMimeTypes = [
-      "application/pdf",
-      "application/vnd.ms-powerpoint",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "video/mp4",
-      "video/quicktime",
-      "video/x-msvideo",
-      "video/x-matroska",
-      "video/webm",
-    ];
-
     const ext = path.extname(file.originalname).toLowerCase();
-    if (
-      !allowedExtensions.includes(ext) ||
-      !allowedMimeTypes.includes(file.mimetype)
-    ) {
+    const allowedForType = allowedByType[requestedType] || fallbackAllowed;
+
+    // We rely on extension because some browsers send generic mime types.
+    if (!allowedForType.includes(ext)) {
       return cb(new Error("Invalid file type"));
     }
     cb(null, true);
@@ -80,6 +75,12 @@ function buildNotification(type, title) {
     return {
       notificationTitle: "New Recording",
       notificationMessage: `New recording uploaded: ${title}`,
+    };
+  }
+  if (type === "book") {
+    return {
+      notificationTitle: "New Book",
+      notificationMessage: `New book uploaded: ${title}`,
     };
   }
 

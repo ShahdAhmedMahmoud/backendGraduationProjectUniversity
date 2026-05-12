@@ -624,6 +624,14 @@ function generateTemporaryPassword() {
   return `Stu@${Math.floor(100000 + Math.random() * 900000)}`;
 }
 
+function normalizeAcademicYears(value) {
+  const input = Array.isArray(value) ? value : [value];
+  const normalized = input
+    .map((year) => Number(year))
+    .filter((year) => [1, 2, 3, 4, 5].includes(year));
+  return [...new Set(normalized)];
+}
+
 // -----------------
 // SIGNUP
 // -----------------
@@ -724,6 +732,7 @@ exports.createStudent = async (req, res) => {
       email: normalizedEmail,
       phone: phone || undefined,
       password: temporaryPassword,
+      onboardingPassword: temporaryPassword,
       student_id: createStudentId(resolvedFullName),
       dob: dob || undefined,
       year: year || 1,
@@ -971,7 +980,15 @@ exports.toggleProfessorStatus = async (req, res) => {
 // -----------------------------
 exports.listCourses = async (req, res) => {
   try {
-    const courses = await Course.find().populate("professors students");
+    const { year } = req.query;
+    const query = {};
+    if (year) {
+      query.academicYears = Number(year);
+    }
+
+    const courses = await Course.find(query).populate(
+      "professors students department",
+    );
     res.json({ success: true, data: courses });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -995,7 +1012,43 @@ exports.getCourse = async (req, res) => {
 
 exports.createCourse = async (req, res) => {
   try {
-    const course = await Course.create(req.body);
+    const {
+      code,
+      name,
+      description,
+      learning_objectives,
+      credits,
+      department,
+      academicYears,
+      maxEnrollment,
+      schedule,
+    } = req.body;
+
+    if (!code || !name) {
+      return res
+        .status(400)
+        .json({ success: false, message: "code and name are required" });
+    }
+
+    const normalizedYears = normalizeAcademicYears(academicYears);
+    if (!normalizedYears.length) {
+      return res.status(400).json({
+        success: false,
+        message: "academicYears must include values between 1 and 5",
+      });
+    }
+
+    const course = await Course.create({
+      code,
+      name,
+      description,
+      learning_objectives,
+      credits,
+      department,
+      academicYears: normalizedYears,
+      maxEnrollment: Number(maxEnrollment || 200),
+      schedule: Array.isArray(schedule) ? schedule : [],
+    });
     res.status(201).json({ success: true, data: course });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1004,7 +1057,23 @@ exports.createCourse = async (req, res) => {
 
 exports.updateCourse = async (req, res) => {
   try {
-    const course = await Course.findByIdAndUpdate(req.params.id, req.body, {
+    const updates = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(updates, "academicYears")) {
+      const normalizedYears = normalizeAcademicYears(updates.academicYears);
+      if (!normalizedYears.length) {
+        return res.status(400).json({
+          success: false,
+          message: "academicYears must include values between 1 and 5",
+        });
+      }
+      updates.academicYears = normalizedYears;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "maxEnrollment")) {
+      updates.maxEnrollment = Number(updates.maxEnrollment);
+    }
+
+    const course = await Course.findByIdAndUpdate(req.params.id, updates, {
       new: true,
     });
     if (!course)
@@ -1033,13 +1102,47 @@ exports.deleteCourse = async (req, res) => {
 exports.assignProfessorsToCourse = async (req, res) => {
   try {
     const { professorIds } = req.body;
+    if (!Array.isArray(professorIds)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "professorIds must be an array" });
+    }
+
     const course = await Course.findById(req.params.id);
     if (!course)
       return res
         .status(404)
         .json({ success: false, message: "Course not found" });
+
+    const professors = await Professor.find({ _id: { $in: professorIds } });
+    if (professors.length !== professorIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more professorIds are invalid",
+      });
+    }
+
+    const oldProfessorIds = (course.professors || []).map((id) => id.toString());
+    const newProfessorIds = professorIds.map((id) => id.toString());
+
     course.professors = professorIds;
     await course.save();
+
+    await Professor.updateMany(
+      { _id: { $in: newProfessorIds } },
+      { $addToSet: { courses: course._id } },
+    );
+
+    const removedProfessorIds = oldProfessorIds.filter(
+      (id) => !newProfessorIds.includes(id),
+    );
+    if (removedProfessorIds.length) {
+      await Professor.updateMany(
+        { _id: { $in: removedProfessorIds } },
+        { $pull: { courses: course._id } },
+      );
+    }
+
     res.json({ success: true, message: "Professors assigned", data: course });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

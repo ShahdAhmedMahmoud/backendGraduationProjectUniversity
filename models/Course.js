@@ -7,6 +7,12 @@ const CourseSchema = new mongoose.Schema({
     description: String,
     learning_objectives: [{ type: String, default: [] }],
     credits: { type: Number, default: 3 },
+    academicYears: {
+        type: [Number],
+        enum: [1, 2, 3, 4, 5],
+        default: [1]
+    },
+    maxEnrollment: { type: Number, default: 200 },
     department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
     professors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Professor' }],
     assistants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Assistant' }],

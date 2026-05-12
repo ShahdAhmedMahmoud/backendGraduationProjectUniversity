@@ -1015,6 +1015,26 @@ async function enrollCourse(req, res) {
     if (student.courses.includes(courseId))
       return error(res, "Already enrolled", 400);
 
+    const studentYear = Number(student.year || 1);
+    const allowedYears = Array.isArray(course.academicYears)
+      ? course.academicYears.map(Number)
+      : [];
+
+    if (!allowedYears.length || !allowedYears.includes(studentYear)) {
+      return error(
+        res,
+        `This course is not available for year ${studentYear}`,
+        403,
+      );
+    }
+
+    if (
+      typeof course.maxEnrollment === "number" &&
+      course.students.length >= course.maxEnrollment
+    ) {
+      return error(res, "Course reached maximum enrollment", 400);
+    }
+
     student.courses.push(courseId);
     course.students.push(student._id);
 
@@ -1032,6 +1052,48 @@ async function enrollCourse(req, res) {
 }
 
 // ==========================================================
+// GET AVAILABLE COURSES FOR LOGGED-IN STUDENT (BY YEAR)
+async function getAvailableCourses(req, res) {
+  try {
+    if (!req.user || !req.user.id) return error(res, "Unauthorized", 401);
+
+    const student = await Student.findById(req.user.id).select("year courses");
+    if (!student) return error(res, "Student not found", 404);
+
+    const studentYear = Number(student.year || 1);
+    const enrolledIds = new Set((student.courses || []).map((id) => id.toString()));
+
+    const courses = await Course.find({
+      academicYears: studentYear,
+    })
+      .populate("professors", "name email")
+      .select(
+        "name code description credits academicYears maxEnrollment professors students",
+      )
+      .lean();
+
+    const data = courses.map((course) => {
+      const currentEnrolled = Array.isArray(course.students)
+        ? course.students.length
+        : 0;
+      return {
+        ...course,
+        isEnrolled: enrolledIds.has(course._id.toString()),
+        seatsLeft:
+          typeof course.maxEnrollment === "number"
+            ? Math.max(course.maxEnrollment - currentEnrolled, 0)
+            : null,
+      };
+    });
+
+    return success(res, data, "Available courses fetched successfully");
+  } catch (err) {
+    console.error("Get available courses error:", err);
+    return error(res, "Server Error", 500);
+  }
+}
+
+// ==========================================================
 // GET MY COURSES
 async function myCourses(req, res) {
   try {
@@ -1039,9 +1101,10 @@ async function myCourses(req, res) {
 
     const student = await Student.findById(req.user.id).populate({
       path: "courses",
-      select: "name code description credits professors assistants",
+      select:
+        "name code description credits academicYears maxEnrollment professors assistants",
       populate: [
-        { path: "professors", select: "full_name email" },
+        { path: "professors", select: "name email" },
         { path: "assistants", select: "full_name email" },
       ],
     });
@@ -1262,6 +1325,7 @@ module.exports = {
   changePassword,
   removeStudent,
   listStudents,
+  getAvailableCourses,
   enrollCourse,
   removeCourse,
   getGrades,
