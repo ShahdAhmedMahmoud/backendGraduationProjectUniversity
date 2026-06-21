@@ -587,6 +587,31 @@ async function getMyCourses(req, res) {
   }
 }
 
+
+async function updatePreferences(req, res) {
+  try {
+    if (!req.user || !req.user.id) return error(res, "Unauthorized", 401);
+
+    const updates = {};
+    for (const key of ["notifications", "darkMode", "language"]) {
+      if (req.body[key] !== undefined) updates[`preferences.${key}`] = req.body[key];
+    }
+
+    const professor = await Professor.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true }
+    ).select("-password -refreshTokens");
+
+    success(res, professor, "Preferences updated");
+  } catch (err) {
+    console.error("Update preferences error:", err);
+    return error(res, "Server Error", 500);
+  }
+}
+
+
+
 // ==============================
 // EXPORT CONTROLLER
 module.exports = {
@@ -607,5 +632,6 @@ module.exports = {
   submitGradesByIdAndName,
   submitGradeById,
   getStudentsInCourse,
-  getMyCourses
+  getMyCourses,
+  updatePreferences
 };

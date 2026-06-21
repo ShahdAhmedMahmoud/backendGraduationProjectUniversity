@@ -1,11 +1,16 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
-    ref_id: mongoose.Schema.Types.ObjectId,
-    ref_type: String,
-    username: { type: String, unique: true },
-    password_hash: String,
-    last_login: Date
+  ref_id: mongoose.Schema.Types.ObjectId,
+  ref_type: String,
+  username: { type: String, unique: true },
+  password_hash: String,
+  last_login: Date,
+  preferences: {
+    notifications: { type: Boolean, default: true },
+    darkMode: { type: Boolean, default: false },
+    language: { type: String, default: "en" },
+  },
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model("User", userSchema);

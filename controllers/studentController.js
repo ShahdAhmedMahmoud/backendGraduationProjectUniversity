@@ -1310,6 +1310,27 @@ async function getDeadlines(req, res) {
     return error(res, "Server Error", 500);
   }
 }
+async function updatePreferences(req, res) {
+  try {
+    if (!req.user || !req.user.id) return error(res, "Unauthorized", 401);
+
+    const updates = {};
+    for (const key of ["notifications", "darkMode", "language"]) {
+      if (req.body[key] !== undefined) updates[`preferences.${key}`] = req.body[key];
+    }
+
+    const student = await Student.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true }
+    ).select("-password -refreshTokens");
+
+    success(res, student, "Preferences updated");
+  } catch (err) {
+    console.error("Update preferences error:", err);
+    return error(res, "Server Error", 500);
+  }
+}
 
 // ==========================================================
 // EXPORT CONTROLLER
@@ -1333,4 +1354,5 @@ module.exports = {
   myCourses,
   getTimetable,
   getDeadlines,
+  updatePreferences
 };

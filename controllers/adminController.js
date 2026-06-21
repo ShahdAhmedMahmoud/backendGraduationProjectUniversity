@@ -1470,3 +1470,37 @@ exports.deleteEvent = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+// ==============================
+// ✅ PREFERENCES (SETTINGS PAGE)
+// ==============================
+
+// PATCH /api/admin/me/preferences
+exports.updatePreferences = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const updates = {};
+    for (const key of ["notifications", "darkMode", "language"]) {
+      if (req.body[key] !== undefined) {
+        updates[`preferences.${key}`] = req.body[key];
+      }
+    }
+
+    const admin = await Admin.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true }
+    ).select("-password");
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+
+    res.json({ success: true, data: admin });
+  } catch (err) {
+    console.error("Update admin preferences error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

@@ -236,5 +236,6 @@ router.get("/events/:id", studentAuth, async (req, res) => {
 });
 
 router.get('/deadlines', studentAuth, studentController.getDeadlines);
+router.patch('/me/preferences', studentAuth, studentController.updatePreferences);
 
 module.exports = router;

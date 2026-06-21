@@ -80,4 +80,7 @@ router.post("/events", adminAuth, adminController.createEvent);
 router.put("/events/:id", adminAuth, adminController.updateEvent);
 router.delete("/events/:id", adminAuth, adminController.deleteEvent);
 
+
+router.patch("/me/preferences", adminAuth, adminController.updatePreferences);
+
 module.exports = router;
