@@ -1,3 +1,4 @@
+const Announcement = require("../models/Announcement");
 const crypto = require("crypto");
 
 const Course = require("../models/Course");
@@ -18,9 +19,63 @@ async function getProfessorCourse(courseId, professorId) {
   return Course.findOne({ _id: courseId, professors: professorId });
 }
 
+// exports.createMeeting = async (req, res) => {
+//   try {
+//     const { courseId, title, description, startsAt, endsAt, meetingUrl } = req.body;
+
+//     if (!courseId || !title || !startsAt || !endsAt) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "courseId, title, startsAt and endsAt are required",
+//       });
+//     }
+
+//     if (!isValidDate(startsAt) || !isValidDate(endsAt)) {
+//       return res.status(400).json({ success: false, message: "Invalid meeting dates" });
+//     }
+
+//     const startDate = new Date(startsAt);
+//     const endDate = new Date(endsAt);
+//     if (endDate <= startDate) {
+//       return res.status(400).json({ success: false, message: "endsAt must be after startsAt" });
+//     }
+
+//     const course = await getProfessorCourse(courseId, req.user.id);
+//     if (!course) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "You are not assigned to this course",
+//       });
+//     }
+
+//     const meeting = await OnlineMeeting.create({
+//       title,
+//       description: description || "",
+//       course: courseId,
+//       professor: req.user.id,
+//       meetingUrl: meetingUrl || buildMeetingUrl(courseId),
+//       startsAt: startDate,
+//       endsAt: endDate,
+//     });
+
+//     const populated = await OnlineMeeting.findById(meeting._id)
+//       .populate("course", "name code")
+//       .populate("professor", "name email");
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Online meeting created successfully",
+//       data: populated,
+//     });
+//   } catch (err) {
+//     console.error("createMeeting error:", err);
+//     res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 exports.createMeeting = async (req, res) => {
   try {
-    const { courseId, title, description, startsAt, endsAt, meetingUrl } = req.body;
+    const { courseId, title, description, startsAt, endsAt, meetingUrl } =
+      req.body;
 
     if (!courseId || !title || !startsAt || !endsAt) {
       return res.status(400).json({
@@ -30,13 +85,17 @@ exports.createMeeting = async (req, res) => {
     }
 
     if (!isValidDate(startsAt) || !isValidDate(endsAt)) {
-      return res.status(400).json({ success: false, message: "Invalid meeting dates" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid meeting dates" });
     }
 
     const startDate = new Date(startsAt);
     const endDate = new Date(endsAt);
     if (endDate <= startDate) {
-      return res.status(400).json({ success: false, message: "endsAt must be after startsAt" });
+      return res
+        .status(400)
+        .json({ success: false, message: "endsAt must be after startsAt" });
     }
 
     const course = await getProfessorCourse(courseId, req.user.id);
@@ -47,6 +106,7 @@ exports.createMeeting = async (req, res) => {
       });
     }
 
+    // Create the meeting
     const meeting = await OnlineMeeting.create({
       title,
       description: description || "",
@@ -57,21 +117,35 @@ exports.createMeeting = async (req, res) => {
       endsAt: endDate,
     });
 
+    // Create announcement for the meeting
+    const announcement = await Announcement.create({
+      title: `📹 New Meeting: ${title}`,
+      content: `Professor has scheduled a new meeting: ${title}\n\nTime: ${new Date(startDate).toLocaleString()}\n\nDescription: ${description || "No description provided"}`,
+      type: "meeting",
+      course: courseId,
+      posted_by: req.user.id,
+      meeting: meeting._id,
+      status: "active",
+      expires_at: endDate,
+    });
+
+    // Populate and return the meeting with announcement info
     const populated = await OnlineMeeting.findById(meeting._id)
       .populate("course", "name code")
       .populate("professor", "name email");
 
     return res.status(201).json({
       success: true,
-      message: "Online meeting created successfully",
+      message:
+        "Online meeting created successfully and announcement sent to students",
       data: populated,
+      announcement: announcement,
     });
   } catch (err) {
     console.error("createMeeting error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
 exports.getProfessorMeetings = async (req, res) => {
   try {
     const query = { professor: req.user.id };
@@ -82,7 +156,11 @@ exports.getProfessorMeetings = async (req, res) => {
       .populate("course", "name code")
       .sort({ startsAt: 1 });
 
-    res.json({ success: true, message: "Meetings fetched successfully", data: meetings });
+    res.json({
+      success: true,
+      message: "Meetings fetched successfully",
+      data: meetings,
+    });
   } catch (err) {
     console.error("getProfessorMeetings error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -97,20 +175,32 @@ exports.updateMeeting = async (req, res) => {
     });
 
     if (!meeting) {
-      return res.status(404).json({ success: false, message: "Meeting not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Meeting not found" });
     }
 
-    const allowed = ["title", "description", "meetingUrl", "startsAt", "endsAt"];
+    const allowed = [
+      "title",
+      "description",
+      "meetingUrl",
+      "startsAt",
+      "endsAt",
+    ];
     allowed.forEach((field) => {
       if (req.body[field] !== undefined) meeting[field] = req.body[field];
     });
 
     if (!isValidDate(meeting.startsAt) || !isValidDate(meeting.endsAt)) {
-      return res.status(400).json({ success: false, message: "Invalid meeting dates" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid meeting dates" });
     }
 
     if (new Date(meeting.endsAt) <= new Date(meeting.startsAt)) {
-      return res.status(400).json({ success: false, message: "endsAt must be after startsAt" });
+      return res
+        .status(400)
+        .json({ success: false, message: "endsAt must be after startsAt" });
     }
 
     await meeting.save();
@@ -119,7 +209,11 @@ exports.updateMeeting = async (req, res) => {
       .populate("course", "name code")
       .populate("professor", "name email");
 
-    res.json({ success: true, message: "Meeting updated successfully", data: populated });
+    res.json({
+      success: true,
+      message: "Meeting updated successfully",
+      data: populated,
+    });
   } catch (err) {
     console.error("updateMeeting error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -135,10 +229,16 @@ exports.cancelMeeting = async (req, res) => {
     ).populate("course", "name code");
 
     if (!meeting) {
-      return res.status(404).json({ success: false, message: "Meeting not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Meeting not found" });
     }
 
-    res.json({ success: true, message: "Meeting cancelled successfully", data: meeting });
+    res.json({
+      success: true,
+      message: "Meeting cancelled successfully",
+      data: meeting,
+    });
   } catch (err) {
     console.error("cancelMeeting error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -149,7 +249,9 @@ exports.getStudentMeetings = async (req, res) => {
   try {
     const student = await Student.findById(req.user.id).select("courses");
     if (!student) {
-      return res.status(404).json({ success: false, message: "Student not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Student not found" });
     }
 
     const query = {
@@ -158,7 +260,9 @@ exports.getStudentMeetings = async (req, res) => {
     };
 
     if (req.query.courseId) {
-      const isEnrolled = student.courses.some((id) => id.toString() === req.query.courseId);
+      const isEnrolled = student.courses.some(
+        (id) => id.toString() === req.query.courseId,
+      );
       if (!isEnrolled) {
         return res.status(403).json({
           success: false,
@@ -173,7 +277,11 @@ exports.getStudentMeetings = async (req, res) => {
       .populate("professor", "name email")
       .sort({ startsAt: 1 });
 
-    res.json({ success: true, message: "Meetings fetched successfully", data: meetings });
+    res.json({
+      success: true,
+      message: "Meetings fetched successfully",
+      data: meetings,
+    });
   } catch (err) {
     console.error("getStudentMeetings error:", err);
     res.status(500).json({ success: false, message: err.message });
