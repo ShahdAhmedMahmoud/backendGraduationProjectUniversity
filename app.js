@@ -24,12 +24,12 @@ const studentAttendanceRoutes = require("./routes/studentAttendanceRoutes");
 const gradeRoutes = require("./routes/gradeRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const onlineMeetingRoutes = require("./routes/onlineMeetingRoutes");
-
+const { startMissedMeetingsJob } = require("./jobs/missedMeetingsJob");
 const app = express();
 
 // Connect DB
 connectDB();
-
+startMissedMeetingsJob();
 // Middlewares
 app.use(morgan("dev"));
 app.use(express.json());

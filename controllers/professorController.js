@@ -1,28 +1,31 @@
+const fs = require("fs-extra");
+const path = require("path");
+const crypto = require("crypto");
+const Joi = require("joi");
+const Event = require("../models/Event");
 
+const Professor = require("../models/Professor");
+const Course = require("../models/Course");
+const Student = require("../models/Student");
 
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} = require("../utils/token");
+const { success, error, profsuccess } = require("../utils/response");
+const sendEmail = require("../utils/sendEmail");
 
-
-const fs = require('fs-extra');
-const path = require('path');
-const crypto = require('crypto');
-const Joi = require('joi');
-
-const Professor = require('../models/Professor');
-const Course = require('../models/Course');
-const Student = require('../models/Student');
-
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/token');
-const { success, error, profsuccess } = require('../utils/response');
-const sendEmail = require('../utils/sendEmail');
-
-const avatarBasePath = '/uploads/professors';
+const avatarBasePath = "/uploads/professors";
 
 // ==============================
 // Helper: generate Professor ID
 function createProfessorId(name) {
-  const letters = (name.replace(/\s+/g, '').substring(0, 3) || 'PROF').toUpperCase();
+  const letters = (
+    name.replace(/\s+/g, "").substring(0, 3) || "PROF"
+  ).toUpperCase();
   const randomNum = Math.floor(1000 + Math.random() * 9000);
-  const suffix = crypto.randomBytes(2).toString('hex').toUpperCase();
+  const suffix = crypto.randomBytes(2).toString("hex").toUpperCase();
   return `${letters}${randomNum}${suffix}`;
 }
 
@@ -31,7 +34,7 @@ function createProfessorId(name) {
 const signupSchema = Joi.object({
   name: Joi.string().min(2).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(8).required()
+  password: Joi.string().min(8).required(),
   // confirm_password: Joi.any().valid(Joi.ref('password')).required(),
   // title: Joi.string().valid('Dr.', 'Prof.', 'Eng.').required(),
   // departments: Joi.array().items(Joi.string()).default([]),
@@ -40,7 +43,7 @@ const signupSchema = Joi.object({
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
-  password: Joi.string().required()
+  password: Joi.string().required(),
 });
 // ==============================
 // SIGNUP
@@ -52,14 +55,14 @@ async function signup(req, res) {
     const { name, email, password } = req.body;
 
     const exists = await Professor.findOne({ email: email.toLowerCase() });
-    if (exists) return error(res, 'Email already registered', 400);
+    if (exists) return error(res, "Email already registered", 400);
 
     const professorId = createProfessorId(name);
 
     const prof = await Professor.create({
       name,
       email: email.toLowerCase(),
-      password
+      password,
       // title,
       // departments,
       // courses,
@@ -76,14 +79,26 @@ async function signup(req, res) {
     //   ));
     // }
 
-    const accessToken = generateAccessToken({ id: prof._id.toString(), role: 'professor', email: prof.email });
-    const refreshToken = generateRefreshToken({ id: prof._id.toString(), role: 'professor', email: prof.email });
+    const accessToken = generateAccessToken({
+      id: prof._id.toString(),
+      role: "professor",
+      email: prof.email,
+    });
+    const refreshToken = generateRefreshToken({
+      id: prof._id.toString(),
+      role: "professor",
+      email: prof.email,
+    });
     await prof.addRefreshToken(refreshToken);
 
-    success(res, { professor: prof, tokens: { accessToken, refreshToken } }, 'Professor registered successfully');
+    success(
+      res,
+      { professor: prof, tokens: { accessToken, refreshToken } },
+      "Professor registered successfully",
+    );
   } catch (err) {
-    console.error('Signup error', err);
-    error(res, 'Server error', 500);
+    console.error("Signup error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -105,24 +120,30 @@ async function login(req, res) {
     const isMatch = await prof.comparePassword(password);
     if (!isMatch) return error(res, "Invalid credentials", 401);
 
-    const accessToken = generateAccessToken({ id: prof.id, role: "professor", email: prof.email });
-    const refreshToken = generateRefreshToken({ id: prof.id, role: "professor", email: prof.email });
+    const accessToken = generateAccessToken({
+      id: prof.id,
+      role: "professor",
+      email: prof.email,
+    });
+    const refreshToken = generateRefreshToken({
+      id: prof.id,
+      role: "professor",
+      email: prof.email,
+    });
     await prof.addRefreshToken(refreshToken);
-
-
 
     const formattedProfessor = {
       id: prof.id,
       name: prof.name,
       email: prof.email,
-      departments: prof.departments?.map(d => d._id),
-      courses: prof.courses?.map(c => c._id)
+      departments: prof.departments?.map((d) => d._id),
+      courses: prof.courses?.map((c) => c._id),
     };
 
     profsuccess(res, {
       message: "Login successful",
       professor: formattedProfessor,
-      token: accessToken
+      token: accessToken,
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -135,28 +156,43 @@ async function login(req, res) {
 async function refreshToken(req, res) {
   try {
     const { refreshToken } = req.body;
-    if (!refreshToken) return error(res, 'refreshToken is required', 400);
+    if (!refreshToken) return error(res, "refreshToken is required", 400);
 
     let payload;
-    try { payload = verifyRefreshToken(refreshToken); }
-    catch { return error(res, 'Invalid refresh token', 401); }
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch {
+      return error(res, "Invalid refresh token", 401);
+    }
 
     const prof = await Professor.findById(payload.id);
-    if (!prof) return error(res, 'Professor not found', 404);
+    if (!prof) return error(res, "Professor not found", 404);
 
-    if (!prof.refreshTokens.some(t => t.token === refreshToken))
-      return error(res, 'Refresh token not recognized', 401);
+    if (!prof.refreshTokens.some((t) => t.token === refreshToken))
+      return error(res, "Refresh token not recognized", 401);
 
-    const accessToken = generateAccessToken({ id: prof._id, role: 'professor', email: prof.email });
-    const newRefreshToken = generateRefreshToken({ id: prof._id, role: 'professor', email: prof.email });
+    const accessToken = generateAccessToken({
+      id: prof._id,
+      role: "professor",
+      email: prof.email,
+    });
+    const newRefreshToken = generateRefreshToken({
+      id: prof._id,
+      role: "professor",
+      email: prof.email,
+    });
 
     await prof.removeRefreshToken(refreshToken);
     await prof.addRefreshToken(newRefreshToken);
 
-    success(res, { accessToken, refreshToken: newRefreshToken }, 'Token refreshed');
+    success(
+      res,
+      { accessToken, refreshToken: newRefreshToken },
+      "Token refreshed",
+    );
   } catch (err) {
-    console.error('Refresh token error', err);
-    error(res, 'Server error', 500);
+    console.error("Refresh token error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -165,40 +201,38 @@ async function refreshToken(req, res) {
 async function logout(req, res) {
   try {
     const prof = await Professor.findById(req.user.id);
-    if (!prof) return error(res, 'Professor not found', 404);
+    if (!prof) return error(res, "Professor not found", 404);
     await prof.clearRefreshTokens();
-    success(res, null, 'Logged out successfully');
+    success(res, null, "Logged out successfully");
   } catch (err) {
-    console.error('Logout error', err);
-    error(res, 'Server error', 500);
+    console.error("Logout error", err);
+    error(res, "Server error", 500);
   }
 }
-
-
 
 // ==============================
 // FORGOT PASSWORD
 async function forgotPassword(req, res) {
   try {
     const { email } = req.body;
-    if (!email) return error(res, 'Email is required', 400);
+    if (!email) return error(res, "Email is required", 400);
 
     const prof = await Professor.findOne({ email: email.toLowerCase() });
-    if (!prof) return error(res, 'No account found', 404);
+    if (!prof) return error(res, "No account found", 404);
 
-    const token = crypto.randomBytes(20).toString('hex');
+    const token = crypto.randomBytes(20).toString("hex");
     prof.resetToken = token;
     prof.resetTokenExpire = Date.now() + 3600000;
     await prof.save();
 
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${token}`;
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password/${token}`;
     const html = `<p>Reset your password: <a href="${resetUrl}">${resetUrl}</a></p>`;
-    await sendEmail(prof.email, 'Password reset', html);
+    await sendEmail(prof.email, "Password reset", html);
 
-    success(res, null, 'Password reset email sent');
+    success(res, null, "Password reset email sent");
   } catch (err) {
-    console.error('Forgot password error', err);
-    error(res, 'Server error', 500);
+    console.error("Forgot password error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -207,10 +241,14 @@ async function forgotPassword(req, res) {
 async function resetPassword(req, res) {
   try {
     const { token, password } = req.body;
-    if (!token || !password) return error(res, 'token and password required', 400);
+    if (!token || !password)
+      return error(res, "token and password required", 400);
 
-    const prof = await Professor.findOne({ resetToken: token, resetTokenExpire: { $gt: Date.now() } });
-    if (!prof) return error(res, 'Invalid or expired token', 400);
+    const prof = await Professor.findOne({
+      resetToken: token,
+      resetTokenExpire: { $gt: Date.now() },
+    });
+    if (!prof) return error(res, "Invalid or expired token", 400);
 
     prof.password = password;
     prof.resetToken = undefined;
@@ -218,10 +256,10 @@ async function resetPassword(req, res) {
     await prof.clearRefreshTokens();
     await prof.save();
 
-    success(res, null, 'Password reset successfully');
+    success(res, null, "Password reset successfully");
   } catch (err) {
-    console.error('Reset password error', err);
-    error(res, 'Server error', 500);
+    console.error("Reset password error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -230,42 +268,40 @@ async function resetPassword(req, res) {
 async function me(req, res) {
   try {
     const prof = await Professor.findById(req.user.id)
-      .select('-password -refreshTokens -resetToken -resetTokenExpire')
-      .populate('departments courses');
-    if (!prof) return error(res, 'Professor not found', 404);
+      .select("-password -refreshTokens -resetToken -resetTokenExpire")
+      .populate("departments courses");
+    if (!prof) return error(res, "Professor not found", 404);
     success(res, prof);
   } catch (err) {
-    console.error('Get profile error', err);
-    error(res, 'Server error', 500);
+    console.error("Get profile error", err);
+    error(res, "Server error", 500);
   }
 }
-
-
-
 
 // ==============================
 // UPDATE PROFILE
 async function updateProfile(req, res) {
   try {
-    const allowed = ['name', 'phone', 'title'];
+    const allowed = ["name", "phone", "title"];
     const updates = {};
-    for (const key of allowed) if (req.body[key] !== undefined) updates[key] = req.body[key];
+    for (const key of allowed)
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
     if (req.file) updates.avatar = `${avatarBasePath}/${req.file.filename}`;
 
     const prof = await Professor.findById(req.user.id);
-    if (!prof) return error(res, 'Professor not found', 404);
+    if (!prof) return error(res, "Professor not found", 404);
 
     if (updates.avatar && prof.avatar) {
-      const oldPath = path.join(process.cwd(), prof.avatar.replace(/^\//, ''));
+      const oldPath = path.join(process.cwd(), prof.avatar.replace(/^\//, ""));
       if (await fs.pathExists(oldPath)) await fs.unlink(oldPath);
     }
 
     Object.assign(prof, updates);
     await prof.save();
-    success(res, prof, 'Profile updated');
+    success(res, prof, "Profile updated");
   } catch (err) {
-    console.error('Update profile error', err);
-    error(res, 'Server error', 500);
+    console.error("Update profile error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -274,22 +310,23 @@ async function updateProfile(req, res) {
 async function changePassword(req, res) {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) return error(res, 'Both passwords required', 400);
+    if (!currentPassword || !newPassword)
+      return error(res, "Both passwords required", 400);
 
     const prof = await Professor.findById(req.user.id);
-    if (!prof) return error(res, 'Professor not found', 404);
+    if (!prof) return error(res, "Professor not found", 404);
 
     const isMatch = await prof.comparePassword(currentPassword);
-    if (!isMatch) return error(res, 'Current password incorrect', 401);
+    if (!isMatch) return error(res, "Current password incorrect", 401);
 
     prof.password = newPassword;
     await prof.clearRefreshTokens();
     await prof.save();
 
-    success(res, null, 'Password changed successfully. Please login again.');
+    success(res, null, "Password changed successfully. Please login again.");
   } catch (err) {
-    console.error('Change password error', err);
-    error(res, 'Server error', 500);
+    console.error("Change password error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -298,16 +335,19 @@ async function changePassword(req, res) {
 async function removeProfessor(req, res) {
   try {
     const prof = await Professor.findById(req.user.id);
-    if (!prof) return error(res, 'Professor not found', 404);
+    if (!prof) return error(res, "Professor not found", 404);
 
     prof.isDeleted = true;
     await prof.save();
-    await Course.updateMany({ professors: prof._id }, { $pull: { professors: prof._id } });
+    await Course.updateMany(
+      { professors: prof._id },
+      { $pull: { professors: prof._id } },
+    );
 
-    success(res, null, 'Professor soft-deleted');
+    success(res, null, "Professor soft-deleted");
   } catch (err) {
-    console.error('Remove professor error', err);
-    error(res, 'Server error', 500);
+    console.error("Remove professor error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -318,18 +358,30 @@ async function listProfessors(req, res) {
     const { page = 1, limit = 20, search, department } = req.query;
     const q = { isDeleted: { $ne: true } };
     if (department) q.departments = department;
-    if (search) q.$or = [{ name: new RegExp(search, 'i') }, { email: new RegExp(search, 'i') }];
+    if (search)
+      q.$or = [
+        { name: new RegExp(search, "i") },
+        { email: new RegExp(search, "i") },
+      ];
 
     const skip = (Math.max(1, Number(page)) - 1) * Number(limit);
     const [items, total] = await Promise.all([
-      Professor.find(q).skip(skip).limit(Number(limit)).populate('departments courses'),
-      Professor.countDocuments(q)
+      Professor.find(q)
+        .skip(skip)
+        .limit(Number(limit))
+        .populate("departments courses"),
+      Professor.countDocuments(q),
     ]);
 
-    success(res, { items, total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) });
+    success(res, {
+      items,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
+    });
   } catch (err) {
-    console.error('List professors error', err);
-    error(res, 'Server error', 500);
+    console.error("List professors error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -338,27 +390,29 @@ async function listProfessors(req, res) {
 async function dashboard(req, res) {
   try {
     const prof = await Professor.findById(req.user.id)
-      .select('-password -refreshTokens -resetToken -resetTokenExpire')
+      .select("-password -refreshTokens -resetToken -resetTokenExpire")
       .populate({
-        path: 'courses',
+        path: "courses",
         populate: [
-          { path: 'grades.student', select: 'full_name email student_id' },
-          { path: 'students', select: 'full_name email student_id' }
-        ]
+          { path: "grades.student", select: "full_name email student_id" },
+          { path: "students", select: "full_name email student_id" },
+        ],
       });
-    if (!prof) return error(res, 'Professor not found', 404);
+    if (!prof) return error(res, "Professor not found", 404);
 
-    const coursesWithGrades = (prof.courses || []).map(course => ({
+    const coursesWithGrades = (prof.courses || []).map((course) => ({
       id: course._id,
       name: course.name,
       code: course.code,
-      grades: (course.grades || []).filter(g => g.professor.toString() === prof._id.toString())
+      grades: (course.grades || []).filter(
+        (g) => g.professor.toString() === prof._id.toString(),
+      ),
     }));
 
     success(res, { professor: prof, courses: coursesWithGrades });
   } catch (err) {
-    console.error('Dashboard error', err);
-    error(res, 'Server error', 500);
+    console.error("Dashboard error", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -368,25 +422,32 @@ async function dashboard(req, res) {
 async function assignCourses(req, res) {
   try {
     const { courseIds } = req.body;
-    if (!Array.isArray(courseIds)) return error(res, "courseIds must be an array", 400);
+    if (!Array.isArray(courseIds))
+      return error(res, "courseIds must be an array", 400);
 
     const prof = await Professor.findById(req.user.id);
     if (!prof) return error(res, "Professor not found", 404);
 
     // Convert prof.courses to string IDs for comparison
-    const existingCourses = prof.courses.map(id => id.toString());
+    const existingCourses = prof.courses.map((id) => id.toString());
 
     // Find duplicates
-    const alreadyAssigned = courseIds.filter(id => existingCourses.includes(id));
+    const alreadyAssigned = courseIds.filter((id) =>
+      existingCourses.includes(id),
+    );
 
     // Find new ones to assign
-    const newCourses = courseIds.filter(id => !existingCourses.includes(id));
+    const newCourses = courseIds.filter((id) => !existingCourses.includes(id));
 
     // If all courses are already assigned → return message
     if (newCourses.length === 0) {
-      return success(res, {
-        assignedBefore: alreadyAssigned
-      }, "All selected courses are already assigned to this professor");
+      return success(
+        res,
+        {
+          assignedBefore: alreadyAssigned,
+        },
+        "All selected courses are already assigned to this professor",
+      );
     }
 
     // Add only new courses
@@ -397,32 +458,34 @@ async function assignCourses(req, res) {
     // Update course.professors list
     await Course.updateMany(
       { _id: { $in: newCourses } },
-      { $addToSet: { professors: prof._id } }
+      { $addToSet: { professors: prof._id } },
     );
 
     // Update student.professors list
     const courses = await Course.find({ _id: { $in: newCourses } });
     await Promise.all(
-      courses.map(c =>
+      courses.map((c) =>
         Student.updateMany(
           { _id: { $in: c.students } },
-          { $addToSet: { professors: prof._id } }
-        )
-      )
+          { $addToSet: { professors: prof._id } },
+        ),
+      ),
     );
 
     // Response
-    return success(res, {
-      newlyAssigned: newCourses,
-      alreadyAssigned
-    }, "Courses assigned successfully");
-
+    return success(
+      res,
+      {
+        newlyAssigned: newCourses,
+        alreadyAssigned,
+      },
+      "Courses assigned successfully",
+    );
   } catch (err) {
     console.error("Assign courses error", err);
     return error(res, "Server error", 500);
   }
 }
-
 
 // ==============================
 // SUBMIT GRADES (Batch by studentId array)
@@ -432,12 +495,15 @@ async function submitGrades(req, res) {
     if (!courseId || !Array.isArray(grades) || grades.length === 0)
       return error(res, "courseId and grades array required", 400);
 
-    const course = await Course.findById(courseId).populate("students", "_id full_name");
+    const course = await Course.findById(courseId).populate(
+      "students",
+      "_id full_name",
+    );
     if (!course) return error(res, "Course not found", 404);
     if (!course.professors.includes(req.user.id))
       return error(res, "Not assigned to this course", 403);
 
-    const enrolledIds = new Set(course.students.map(s => s._id.toString()));
+    const enrolledIds = new Set(course.students.map((s) => s._id.toString()));
 
     const gradeDocs = [];
     const invalidStudents = [];
@@ -454,7 +520,11 @@ async function submitGrades(req, res) {
         continue;
       }
       gradeDocs.push({ student: sid, professor: req.user.id, grade: g.grade });
-      await Student.findByIdAndUpdate(sid, { $push: { grades: { course: courseId, grade: g.grade, professor: req.user.id } } });
+      await Student.findByIdAndUpdate(sid, {
+        $push: {
+          grades: { course: courseId, grade: g.grade, professor: req.user.id },
+        },
+      });
     }
 
     if (gradeDocs.length > 0) {
@@ -462,7 +532,11 @@ async function submitGrades(req, res) {
       await course.save();
     }
 
-    success(res, { submitted: gradeDocs.length, invalidStudents, missingStudentIds }, "Grades processed successfully");
+    success(
+      res,
+      { submitted: gradeDocs.length, invalidStudents, missingStudentIds },
+      "Grades processed successfully",
+    );
   } catch (err) {
     console.error("Submit grades error:", err);
     error(res, "Server error", 500);
@@ -477,7 +551,10 @@ async function submitGradesByIdAndName(req, res) {
     if (!courseId || !Array.isArray(grades) || grades.length === 0)
       return error(res, "courseId and grades array required", 400);
 
-    const course = await Course.findById(courseId).populate("students", "_id full_name");
+    const course = await Course.findById(courseId).populate(
+      "students",
+      "_id full_name",
+    );
     if (!course) return error(res, "Course not found", 404);
     if (!course.professors.includes(req.user.id))
       return error(res, "Not assigned to this course", 403);
@@ -488,13 +565,17 @@ async function submitGradesByIdAndName(req, res) {
 
     for (const g of grades) {
       if (!g.studentId || !g.name) {
-        missingInfo.push({ entry: g, message: "Both studentId and name are required" });
+        missingInfo.push({
+          entry: g,
+          message: "Both studentId and name are required",
+        });
         continue;
       }
 
-      const student = course.students.find(s =>
-        s._id.toString() === g.studentId.toString() &&
-        s.full_name.toLowerCase() === g.name.toLowerCase()
+      const student = course.students.find(
+        (s) =>
+          s._id.toString() === g.studentId.toString() &&
+          s.full_name.toLowerCase() === g.name.toLowerCase(),
       );
 
       if (!student) {
@@ -502,9 +583,15 @@ async function submitGradesByIdAndName(req, res) {
         continue;
       }
 
-      gradeDocs.push({ student: student._id, professor: req.user.id, grade: g.grade });
+      gradeDocs.push({
+        student: student._id,
+        professor: req.user.id,
+        grade: g.grade,
+      });
       await Student.findByIdAndUpdate(student._id, {
-        $push: { grades: { course: courseId, grade: g.grade, professor: req.user.id } }
+        $push: {
+          grades: { course: courseId, grade: g.grade, professor: req.user.id },
+        },
       });
     }
 
@@ -513,7 +600,11 @@ async function submitGradesByIdAndName(req, res) {
       await course.save();
     }
 
-    success(res, { submitted: gradeDocs.length, invalidStudents, missingInfo }, "Grades processed successfully");
+    success(
+      res,
+      { submitted: gradeDocs.length, invalidStudents, missingInfo },
+      "Grades processed successfully",
+    );
   } catch (err) {
     console.error("Submit grades by ID and Name error:", err);
     error(res, "Server error", 500);
@@ -528,12 +619,15 @@ async function submitGradeById(req, res) {
     if (!courseId || !studentId || grade === undefined)
       return error(res, "courseId, studentId and grade are required", 400);
 
-    const course = await Course.findById(courseId).populate("students", "_id full_name");
+    const course = await Course.findById(courseId).populate(
+      "students",
+      "_id full_name",
+    );
     if (!course) return error(res, "Course not found", 404);
     if (!course.professors.includes(req.user.id))
       return error(res, "Not assigned to this course", 403);
 
-    const enrolledIds = new Set(course.students.map(s => s._id.toString()));
+    const enrolledIds = new Set(course.students.map((s) => s._id.toString()));
     if (!enrolledIds.has(studentId))
       return error(res, "Student not enrolled in this course", 400);
 
@@ -542,7 +636,7 @@ async function submitGradeById(req, res) {
     await course.save();
 
     await Student.findByIdAndUpdate(studentId, {
-      $push: { grades: { course: courseId, grade, professor: req.user.id } }
+      $push: { grades: { course: courseId, grade, professor: req.user.id } },
     });
 
     success(res, { submitted: 1, studentId }, "Grade submitted successfully");
@@ -557,17 +651,20 @@ async function submitGradeById(req, res) {
 async function getStudentsInCourse(req, res) {
   try {
     const { courseId } = req.body;
-    if (!courseId) return error(res, 'courseId is required', 400);
+    if (!courseId) return error(res, "courseId is required", 400);
 
-    const course = await Course.findById(courseId).populate('students', 'student_id full_name');
-    if (!course) return error(res, 'Course not found', 404);
+    const course = await Course.findById(courseId).populate(
+      "students",
+      "student_id full_name",
+    );
+    if (!course) return error(res, "Course not found", 404);
     if (!course.professors.includes(req.user.id))
-      return error(res, 'Not assigned to this course', 403);
+      return error(res, "Not assigned to this course", 403);
 
-    success(res, course.students, 'Students retrieved successfully');
+    success(res, course.students, "Students retrieved successfully");
   } catch (err) {
-    console.error('Get students in course error:', err);
-    error(res, 'Server error', 500);
+    console.error("Get students in course error:", err);
+    error(res, "Server error", 500);
   }
 }
 
@@ -575,8 +672,10 @@ async function getStudentsInCourse(req, res) {
 // GET MY COURSES (professor)
 async function getMyCourses(req, res) {
   try {
-    const professor = await Professor.findById(req.user.id)
-      .populate("courses", "name code description students"); // populate students if needed
+    const professor = await Professor.findById(req.user.id).populate(
+      "courses",
+      "name code description students",
+    ); // populate students if needed
 
     if (!professor) return error(res, "Professor not found", 404);
 
@@ -587,20 +686,20 @@ async function getMyCourses(req, res) {
   }
 }
 
-
 async function updatePreferences(req, res) {
   try {
     if (!req.user || !req.user.id) return error(res, "Unauthorized", 401);
 
     const updates = {};
     for (const key of ["notifications", "darkMode", "language"]) {
-      if (req.body[key] !== undefined) updates[`preferences.${key}`] = req.body[key];
+      if (req.body[key] !== undefined)
+        updates[`preferences.${key}`] = req.body[key];
     }
 
     const professor = await Professor.findByIdAndUpdate(
       req.user.id,
       { $set: updates },
-      { new: true }
+      { new: true },
     ).select("-password -refreshTokens");
 
     success(res, professor, "Preferences updated");
@@ -610,7 +709,59 @@ async function updatePreferences(req, res) {
   }
 }
 
+// ==============================
+// GET MY TIMETABLE (professor)
+async function getMyTimetable(req, res) {
+  try {
+    const professor = await Professor.findById(req.user.id).populate({
+      path: "courses",
+      select: "name code schedule",
+    });
 
+    if (!professor) return error(res, "Professor not found", 404);
+
+    const instructorName = professor.title
+      ? `${professor.title} ${professor.name}`
+      : professor.name;
+
+    const timetable = [];
+    (professor.courses || []).forEach((course) => {
+      (course.schedule || []).forEach((slot, idx) => {
+        timetable.push({
+          id: `${course._id}-${idx}`,
+          course_name: course.name,
+          course_code: course.code,
+          instructor: instructorName,
+          room: slot.room || "",
+          day: slot.day,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+        });
+      });
+    });
+
+    success(res, timetable, "Timetable fetched successfully");
+  } catch (err) {
+    console.error("Get professor timetable error:", err);
+    error(res, "Server error", 500);
+  }
+}
+// GET UPCOMING EVENTS (professor)
+async function getUpcomingEvents(req, res) {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const events = await Event.find({ date: { $gte: startOfToday } })
+      .sort({ date: 1 })
+      .limit(20);
+
+    success(res, events, "Events fetched successfully");
+  } catch (err) {
+    console.error("Get professor events error:", err);
+    error(res, "Server error", 500);
+  }
+}
 
 // ==============================
 // EXPORT CONTROLLER
@@ -619,8 +770,8 @@ module.exports = {
   login,
   refreshToken,
   logout,
-  forgotPassword,        // <-- this must match the declared function name
-  resetPassword,         // <-- must match exactly
+  forgotPassword, // <-- this must match the declared function name
+  resetPassword, // <-- must match exactly
   me,
   updateProfile,
   changePassword,
@@ -633,5 +784,7 @@ module.exports = {
   submitGradeById,
   getStudentsInCourse,
   getMyCourses,
-  updatePreferences
+  updatePreferences,
+  getMyTimetable,
+  getUpcomingEvents,
 };

@@ -108,11 +108,12 @@ router.patch('/courses/assign', professorAuth, professorController.assignCourses
 // ------------------------------
 // COURSES & GRADES ROUTES
 // ------------------------------
+router.get('/events', professorAuth, professorController.getUpcomingEvents);
 router.post('/submitGrades', professorAuth, professorController.submitGrades); // by ID array
 router.post('/submitGradesByIdAndName', professorAuth, professorController.submitGradesByIdAndName); // by ID + Name
 router.post('/submitGradeById', professorAuth, professorController.submitGradeById); // single student
 router.post('/courses/students', professorAuth, professorController.getStudentsInCourse);
 router.get('/dashboard', professorAuth, professorController.dashboard);
 router.get('/courses', professorAuth, professorController.getMyCourses);
-
+router.get('/timetable', professorAuth, professorController.getMyTimetable);
 module.exports = router;
