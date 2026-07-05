@@ -1,4 +1,5 @@
 // src/index.js
+process.env.TZ = "Africa/Cairo";
 require("dotenv").config();
 const express = require("express");
 const morgan = require("morgan");
