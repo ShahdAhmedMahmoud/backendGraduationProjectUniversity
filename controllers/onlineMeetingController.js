@@ -589,7 +589,6 @@ function startOfDay(date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-const Attendance = require("../models/Attendance");
 
 function buildMeetingUrl(courseId) {
   const random = crypto.randomBytes(6).toString("hex");
